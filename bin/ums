@@ -1,0 +1,9 @@
+#!/usr/bin/python2
+# -*- coding: utf-8 -*-
+
+import sys
+sys.path.append("/home/f0rud/workspace/ums2")
+
+if __name__=="__main__":
+	import ums.main
+	ums.main.main()
