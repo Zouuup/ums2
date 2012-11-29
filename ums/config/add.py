@@ -22,7 +22,8 @@ def init(args):
         'mirror': args.mirror,
         'arch': args.arch,
         'source': args.source,
-        'target': args.target}
+        'target': args.target,
+        'updated': 'never'}
 
     all = ums.redis.get(ums.defaults.REDIS_PREFIX + 'sources')
 

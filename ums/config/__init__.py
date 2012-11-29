@@ -29,9 +29,8 @@ def init_subparser(sub_parser):
                             help='Mirror for use with this, default to '
                             + ums.defaults.MIRROR)
 
-    add_parser.set_defaults(module='ums.config.main')
+    add_parser.set_defaults(module='ums.config.add')
     add_parser.set_defaults(mirror=ums.defaults.MIRROR)
-    add_parser.set_defaults(show='n')
 
     ## Delete
     del_parser = config_sub_parser.add_parser('del', help='delete a repo')

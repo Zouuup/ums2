@@ -2,5 +2,8 @@
 # -*- coding: utf-8 -*-
 
 if __name__=="__main__":
-	import ums.main
-	ums.main.main()
+    import ums.main
+    try:
+        ums.main.main()
+    except KeyboardInterrupt:
+        pass

@@ -9,6 +9,7 @@ import importlib
 import redis
 #just import the base to add sub commands
 import ums.config
+import ums.update
 
 
 def main():
@@ -24,9 +25,16 @@ def main():
                         + str(ums.defaults.REDIS_PORT))
     parser.set_defaults(redis_port=ums.defaults.REDIS_PORT)
 
+    parser.add_argument('--home',
+                        help='folder to store data inside, '
+                        + 'must have full access to it, defaults to: '
+                        + ums.defaults.HOME)
+    parser.set_defaults(home=ums.defaults.HOME)
+
     # Add sub parser for config module
     sub_parser = parser.add_subparsers(help='ums operations')
     ums.config.init_subparser(sub_parser)
+    ums.update.init_subparser(sub_parser)
 
     args = parser.parse_args()
 
