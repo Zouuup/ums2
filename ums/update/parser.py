@@ -32,8 +32,7 @@ class SourcesParser:
         """
         if line[:1] == ' ':
             if not self.last_array_data:
-                self.result[self.last_index] = self.result[self.last_index]
-                + line.rstrip()
+                self.result[self.last_index] += line.rstrip()
             else:
                 self.result[self.last_index].append(line.strip())
         else:
@@ -62,6 +61,7 @@ class SourcesParser:
         channel = channel.replace('/', '_').upper()
         key = ums.defaults.REDIS_PREFIX + channel + ums.defaults.PACKAGES_INFIX
 
+        pipe = redis.pipeline()
         if 'Binary' in self.result:
             pkgs = self.result['Binary'].split(',')
         else:
@@ -70,7 +70,29 @@ class SourcesParser:
         for pkg in pkgs:
             new_key = key + pkg.strip(' \t\n').upper()
             for hkey in self.result:
-                redis.hset(new_key, hkey, json.dumps(self.result[hkey]))
+                pipe.hset(new_key, hkey, json.dumps(self.result[hkey]))
+        pipe.execute()
+
+    def save_some_toredis(self, redis, channel):
+        """Save to redis.
+
+        @type redis: redis
+        @param redis: redis (or pipeline)
+        @type channel: string
+        @param channel: channel string
+
+        """
+
+        channel = channel.replace('/', '_').upper()
+        key = ums.defaults.REDIS_PREFIX + channel + ums.defaults.PACKAGES_INFIX
+        key = key + self.result['Package'].strip(' \t\n').upper()
+
+        pipe = redis.pipeline()
+        keys = ['Depends', 'Pre-Depends']
+        for hkey in keys:
+            if hkey in self.result:
+                pipe.hset(key, hkey, json.dumps(self.result[hkey]))
+        pipe.execute()
 
 
 def parse_sources(home, entry):
@@ -90,7 +112,6 @@ def parse_sources(home, entry):
     data = SourcesParser()
     data.re_initialize()
 
-    pipe = ums.redis.pipeline()
     while True:
         line = f.readline()
 
@@ -99,9 +120,31 @@ def parse_sources(home, entry):
             break
 
         if line.strip(' \t\n') == "":
-            data.save_toredis(pipe, entry['source'])
+            data.save_toredis(ums.redis, entry['source'])
             data.re_initialize()
         else:
             data.add_line(line.strip('\n'))
 
-    pipe.execute()
+    # just parse depends and pre-depends on this file
+    package = home + '/' + entry['target'].replace('/', '_') + '.Packages.bz2'
+
+    f = bz2.BZ2File(package)
+
+    data = SourcesParser()
+    data.re_initialize()
+
+    current = False
+    while True:
+        line = f.readline()
+
+        # Its the end of stream, not an empty splitter
+        if line == '':
+            break
+
+        if line.strip(' \t\n') == "":
+            data.save_some_toredis(ums.redis, entry['source'])
+            data.re_initialize()
+        else:
+            data.add_line(line.strip('\n'))
+
+    print "Updatet successfully"

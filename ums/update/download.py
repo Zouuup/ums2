@@ -20,7 +20,7 @@ def download(home, entry):
     """
 
     address = entry['mirror'] + '/dists/' + entry['source']
-    + '/source/Sources.bz2'
+    address = address + '/source/Sources.bz2'
     target = home + '/' + entry['target'].replace('/', '_') + '.Sources.bz2'
 
     if not os.path.exists(home):
@@ -33,8 +33,8 @@ def download(home, entry):
     ret_code = call(['wget', '-c', '-O', target, address])
     if ret_code == 0:
         address = entry['mirror'] + '/dists/' + entry['source']
-        + '/' + entry['arch'] + '/Packages.bz2'
+        address = address + '/' + entry['arch'] + '/Packages.bz2'
         target = home + '/' + entry['target'].replace('/', '_')
-        + '.Packages.bz2'
+        target = target + '.Packages.bz2'
         ret_code = call(['wget', '-c', '-O', target, address])
     return ret_code
