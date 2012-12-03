@@ -83,15 +83,27 @@ class SourcesParser:
 
         """
 
+        default_channel = channel
+
         channel = channel.replace('/', '_').upper()
         key = ums.defaults.REDIS_PREFIX + channel + ums.defaults.PACKAGES_INFIX
         key = key + self.result['Package'].strip(' \t\n').upper()
 
         #pipe = redis.pipeline()
-        keys = ['Depends', 'Pre-Depends']
+        keys = ['Depends', 'Pre-Depends', 'Provides']
         for hkey in keys:
             if hkey in self.result:
                 pipe.hset(key, hkey, json.dumps(self.result[hkey]))
+
+        if 'Provides' in self.result:
+            key = ums.defaults.REDIS_PREFIX + channel
+            key += ums.defaults.PROVIDES_INFIX
+            provides = self.result['Provides'].strip(' \t\n').split(',')
+            for p in provides:
+                new_key = key + p.strip(' \t\n').upper()
+                pipe.sadd(new_key,
+                          default_channel + ':' +
+                          self.result['Package'].strip(' \t\n'))
         #pipe.execute()
 
 
@@ -122,7 +134,7 @@ def parse_sources(home, entry):
             break
 
         if line.strip(' \t\n') == "":
-            data.save_toredis(pipe, entry['source'])
+            data.save_toredis(pipe, entry['target'])
             data.re_initialize()
         else:
             data.add_line(line.strip('\n'))
@@ -144,11 +156,9 @@ def parse_sources(home, entry):
             break
 
         if line.strip(' \t\n') == "":
-            data.save_some_toredis(pipe, entry['source'])
+            data.save_some_toredis(pipe, entry['target'])
             data.re_initialize()
         else:
             data.add_line(line.strip('\n'))
-
-    print "Updatet successfully"
-
     pipe.execute()
+    print "Updated successfully"
