@@ -109,7 +109,7 @@ def parse_sources(home, entry):
 
     f = bz2.BZ2File(source)
 
-    pipe = ums.redis.pipeline()
+    ums.redis.execute_command('MULTI')
 
     data = SourcesParser()
     data.re_initialize()
@@ -122,7 +122,7 @@ def parse_sources(home, entry):
             break
 
         if line.strip(' \t\n') == "":
-            data.save_toredis(pipe, entry['source'])
+            data.save_toredis(ums.redis, entry['source'])
             data.re_initialize()
         else:
             data.add_line(line.strip('\n'))
@@ -144,11 +144,11 @@ def parse_sources(home, entry):
             break
 
         if line.strip(' \t\n') == "":
-            data.save_some_toredis(pipe, entry['source'])
+            data.save_some_toredis(ums.redis, entry['source'])
             data.re_initialize()
         else:
             data.add_line(line.strip('\n'))
 
-    print "Updatet successfully"
+    ums.redis.execute_command('EXEC')
 
-    pipe.execute()
+    print "Updatet successfully"
