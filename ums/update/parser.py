@@ -89,7 +89,6 @@ class SourcesParser:
         key = ums.defaults.REDIS_PREFIX + channel + ums.defaults.PACKAGES_INFIX
         key = key + self.result['Package'].strip(' \t\n').upper()
 
-        #pipe = redis.pipeline()
         keys = ['Depends', 'Pre-Depends', 'Provides']
         for hkey in keys:
             if hkey in self.result:
@@ -101,10 +100,15 @@ class SourcesParser:
             provides = self.result['Provides'].strip(' \t\n').split(',')
             for p in provides:
                 new_key = key + p.strip(' \t\n').upper()
-                pipe.sadd(new_key,
-                          default_channel + ':' +
-                          self.result['Package'].strip(' \t\n'))
-        #pipe.execute()
+                try:
+                    pipe.sadd(new_key,
+                              default_channel + ':' +
+                              self.result['Package'].strip(' \t\n'))
+                except ValueError:
+                    # it's no big deal as it's related to parsing
+                    # QUEUED string as int which is default response
+                    # callback of SADD command.
+                    pass
 
 
 def parse_sources(home, entry):
