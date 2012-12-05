@@ -32,9 +32,9 @@ class SourcesParser:
         """
         if line[:1] == ' ':
             if not self.last_array_data:
-                self.result[self.last_index] += line.rstrip().replace('"',' ')
+                self.result[self.last_index] += line.rstrip()
             else:
-                self.result[self.last_index].append(line.strip().replace('"',' '))
+                self.result[self.last_index].append(line.strip())
         else:
             data = line.strip('\n').split(':', 1)
             if len(data) != 2:
@@ -73,17 +73,17 @@ class SourcesParser:
                 pipe.hset(new_key, hkey, json.dumps(self.result[hkey]))
         #pipe.execute()
 
-    def save_some_toredis(self, pipe, channel):
+    def save_some_toredis(self, pipe, channel, target_channel):
         """Save to redis.
 
         @type pipe: redis
         @param pipe: redis (or pipeline)
         @type channel: string
         @param channel: channel string
+        @type target_channel: string
+        @param target_channel: channel string
 
         """
-
-        default_channel = channel
 
         channel = channel.replace('/', '_').upper()
         key = ums.defaults.REDIS_PREFIX + channel + ums.defaults.PACKAGES_INFIX
@@ -102,7 +102,7 @@ class SourcesParser:
                 new_key = key + p.strip(' \t\n').upper()
                 try:
                     pipe.sadd(new_key,
-                              default_channel + ':' +
+                              target_channel + ':' +
                               self.result['Package'].strip(' \t\n'))
                 except ValueError:
                     # it's no big deal as it's related to parsing
@@ -111,25 +111,51 @@ class SourcesParser:
                     pass
 
 
-def parse_sources(home, entry):
+def parse_sources(home, entry_all):
     """Save to redis.
 
     @type home: string
     @param home: home directory
-    @type entry: list
-    @param entry: entry from redis
+    @type entry_all: list
+    @param entry_all: entry from redis
 
     """
+    for entry in entry_all:
+        i = entry_all.index(entry)
+        source = home + '/' + entry['target'].replace('/', '_')
+        source += str(i) + '.Sources.bz2'
 
-    source = home + '/' + entry['target'].replace('/', '_') + '.Sources.bz2'
+        f = bz2.BZ2File(source)
 
-    f = bz2.BZ2File(source)
+        ums.redis.execute_command('MULTI')
 
-    ums.redis.execute_command('MULTI')
+        data = SourcesParser()
+        data.re_initialize()
 
-    data = SourcesParser()
-    data.re_initialize()
+        while True:
+            line = f.readline()
 
+            # Its the end of stream, not an empty splitter
+            if line == '':
+                break
+
+            if line.strip(' \t\n') == "":
+                data.add_line('_Source: ' + entry['source'])
+                data.save_toredis(ums.redis, entry['source'])
+                data.re_initialize()
+            else:
+                data.add_line(line.strip('\n'))
+
+        # just parse depends and pre-depends on this file
+        package = home + '/' + entry['target'].replace('/', '_')
+        package += str(i) + '.Packages.bz2'
+
+        f = bz2.BZ2File(package)
+
+        data = SourcesParser()
+        data.re_initialize()
+
+        current = False
     while True:
         line = f.readline()
 
@@ -138,29 +164,7 @@ def parse_sources(home, entry):
             break
 
         if line.strip(' \t\n') == "":
-            data.save_toredis(ums.redis, entry['target'])
-            data.re_initialize()
-        else:
-            data.add_line(line.strip('\n'))
-
-    # just parse depends and pre-depends on this file
-    package = home + '/' + entry['target'].replace('/', '_') + '.Packages.bz2'
-
-    f = bz2.BZ2File(package)
-
-    data = SourcesParser()
-    data.re_initialize()
-
-    current = False
-    while True:
-        line = f.readline()
-
-        # Its the end of stream, not an empty splitter
-        if line == '':
-            break
-
-        if line.strip(' \t\n') == "":
-            data.save_some_toredis(ums.redis, entry['target'])
+            data.save_some_toredis(ums.redis, entry['source'], entry['target'])
             data.re_initialize()
         else:
             data.add_line(line.strip('\n'))

@@ -17,16 +17,23 @@ def init(args):
     @param args: module arguments
 
     """
-    all = ums.redis.get(ums.defaults.REDIS_PREFIX + 'sources')
+    all_pkgs = ums.redis.get(ums.defaults.REDIS_PREFIX + 'sources')
 
-    if not all:
-        all = {}
+    if not all_pkgs:
+        all_pkgs = {}
     else:
-        all = json.loads(all)
+        all_pkgs = json.loads(all_pkgs)
 
-    if args.target in all:
-        del all[args.target]
-        ums.redis.set(ums.defaults.REDIS_PREFIX + 'sources', json.dumps(all))
+    if args.target in all_pkgs:
+        if args.partial == '':
+            del all_pkgs[args.target]
+        else:
+            for i in all_pkgs[args.target]:
+                if i['source'] == args.partial:
+                    del all_pkgs[args.target][all_pkgs[args.target].index(i)]
+
+        ums.redis.set(ums.defaults.REDIS_PREFIX + 'sources',
+                      json.dumps(all_pkgs))
         print "source removed"
     else:
         print "No added source for key " + args.target

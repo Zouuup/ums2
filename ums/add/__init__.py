@@ -22,11 +22,14 @@ def init_subparser(sub_parser):
                             help='target package to install')
     add_parser.add_argument('--asdep', type=bool,
                             help='Add as dependency ')
+    add_parser.add_argument('--strict', type=bool,
+                            help='Strict mode')
 
     add_parser.add_argument('--level', type=int,
                             help='Max walk level')
 
     add_parser.set_defaults(module='ums.add.main')
     add_parser.set_defaults(asdep=False)
+    add_parser.set_defaults(strict=ums.defaults.STRICT)
     add_parser.set_defaults(level=3)
     return

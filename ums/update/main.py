@@ -35,7 +35,6 @@ def init(args):
     for entry in update_list:
         ret_code = download(args.home, entry)
         if ret_code != 0:
-            print "Can not download " + entry['source']
-            + ' from ' + entry['mirror']
+            print "Can not download"
             return
         ums.update.parser.parse_sources(args.home, entry)

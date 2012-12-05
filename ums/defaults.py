@@ -16,3 +16,5 @@ DL_LIST = REDIS_PREFIX + 'DownloadList'
 BUILD_LIST = REDIS_PREFIX + 'BuildList'
 
 HOME = '/tmp/ums'
+
+STRICT = True

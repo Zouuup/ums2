@@ -25,17 +25,22 @@ def init_subparser(sub_parser):
                             help='target architecture')
     add_parser.add_argument('target',
                             help='target in xamin project like stable/main')
+    add_parser.add_argument('--priority', type=int,
+                            help='target priority, for duplicates')
     add_parser.add_argument('--mirror',
                             help='Mirror for use with this, default to '
                             + ums.defaults.MIRROR)
 
     add_parser.set_defaults(module='ums.config.add')
     add_parser.set_defaults(mirror=ums.defaults.MIRROR)
+    add_parser.set_defaults(priority=0)
 
     ## Delete
     del_parser = config_sub_parser.add_parser('del', help='delete a repo')
     del_parser.add_argument('target', help='xamin repository name to delete')
+    del_parser.add_argument('--partial', help='just delete a partial of repo')
     del_parser.set_defaults(module='ums.config.delete')
+    del_parser.set_defaults(partial='')
 
     ## Show
     show_parser = config_sub_parser.add_parser(

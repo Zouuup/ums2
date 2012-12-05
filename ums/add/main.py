@@ -12,19 +12,21 @@ class DependencyWalker:
     """Dependency walker class."""
 
     package = ''
+    base_channel = ''
     channel = ''
     prefered = ''
     source = {}
     max_level = 0
     level = 0
     ver = set()
+    strict = True
 
     # Static variable, I hate Python!!!
     provides = set()
 
     redis = ums.redis
 
-    def __init__(self, package, channel='', max_level=0, ver=set()):
+    def __init__(self, package, channel, max_level=0, ver=set(), strict=True):
         """Initialize object.
 
         @type package: string
@@ -35,12 +37,16 @@ class DependencyWalker:
         @param max_level: check max level
         @type ver: set
         @param ver: version conditions
+        @type strict: boolean
+        @param strict: strict mode?
 
         """
+        self.base_channel = channel
+        self.strict = strict
         self.max_level = max_level
         self.ver = ver
         self.package = package
-        self.channel = ''
+        self.channel = []
         if channel != '':
             self.find_channel(channel)
 
@@ -65,40 +71,27 @@ class DependencyWalker:
             raise Exception("The " + channel + " is not available")
 
         self.source = all_pkgs[channel]
-        self.channel = channel
+        self.channel = []
+        for i in all_pkgs[channel]:
+            self.channel.append(i['source'])
 
     def check_provides(self):
-        """check for provides package."""
+        """check for provides package.
+
+        @rtype: string
+        @return provides list
+
+        """
 
         #Check for provides
-        provides = ums.defaults.REDIS_PREFIX + '*'
-        provides += ums.defaults.PROVIDES_INFIX + self.package.upper()
-
-        pkeys = self.redis.keys(provides)
-        if len(pkeys) == 0:
-            raise Exception('Package ' + self.package +
-                            ' not found in any channel.')
-        #There is a prefered channel
-        if self.channel != '':
-            prefered = ums.defaults.REDIS_PREFIX
-            prefered += self.channel.replace('/', '_').upper()
-            prefered += ums.defaults.PROVIDES_INFIX
-            prefered += self.package.upper()
-
-            if prefered in pkeys:
-                DependencyWalker.provides.add(prefered)
-                return
-
-        if len(pkeys) == 1:
-            DependencyWalker.provides.add(pkeys[0])
-            return
-
-        i = 1
-        for key in pkeys:
-            print i + ')' + key
-
-        code = raw_input('What is your selection :')
-        DependencyWalker.provides.add(pkeys[code])
+        for i in self.channel:
+            provides = ums.defaults.REDIS_PREFIX + i.replace('/', '_').upper()
+            provides += ums.defaults.PROVIDES_INFIX + self.package.upper()
+            data = self.redis.exists(provides)
+            if data:
+                return provides
+        #if self.strict:
+        raise Exception('Can not find ' + self.package + ' in strict mode')
 
     def find_package(self):
         """find package.
@@ -108,38 +101,15 @@ class DependencyWalker:
 
         """
 
-        #TODO add check for version too
-        key = ums.defaults.REDIS_PREFIX + '*'
-        key += ums.defaults.PACKAGES_INFIX + self.package.upper()
+        for i in self.channel:
+            key = ums.defaults.REDIS_PREFIX + i.replace('/', '_').upper()
+            key += ums.defaults.PACKAGES_INFIX + self.package.upper()
 
-        keys = self.redis.keys(key)
+            data = self.redis.exists(key)
+            if data:
+                return key
 
-        #no prefered channel or that is not part of prefered channel
-        #No package at all
-        if len(keys) == 0:
-            self.check_provides()
-            # Then its a provid pkg
-            #Do not set prefered. so its not checked with other dependency,
-            return ''
-
-        if self.channel != '':  # There is a prefered channel
-            prefered = ums.defaults.REDIS_PREFIX
-            prefered += self.channel.replace('/', '_').upper()
-            prefered += ums.defaults.PACKAGES_INFIX
-            prefered += self.package.upper()
-
-            if prefered in keys:
-                return prefered
-
-        if len(keys) == 1:  # only one package
-            return keys[0]
-
-        i = 1
-        for key in keys:
-            print i + ')' + key
-
-        code = raw_input('What is your selection :')
-        return keys[code - 1]
+        return ''
 
     def parse_depends(self, depends):
         """parse depends part.
@@ -173,8 +143,20 @@ class DependencyWalker:
         @return array of depends (in redis key strings)
 
         """
-        if self.prefered == '':
-            return []
+        if self.prefered == '':  # Is this a Provides package?
+            provides = self.check_provides()
+            items = self.redis.smembers(provides)
+            result = []
+            for i in items:
+                pkg_detail = i.split(':')
+                dw = DependencyWalker(pkg_detail[1],
+                                      pkg_detail[0],
+                                      self.max_level,
+                                      set(),
+                                      self.strict)
+                result.extend(dw.walk_dependency(level + 1))
+
+            return result
 
         if level > self.max_level:
             return [self.prefered]
@@ -207,23 +189,18 @@ class DependencyWalker:
 
         #Now list is uniqe, walk for them
         real_result = [self.prefered]
-        # First add Provides
-        for p in DependencyWalker.provides:
-            items = self.redis.smembers(p)
-            for i in items:
-                pkg_detail = i.split(':')
-                dw = DependencyWalker(pkg_detail[1], pkg_detail[0], self.max_level)
-                real_result.extend(dw.walk_dependency(level))
-
-        DependencyWalker.provides = set()
         for i in result:
-            dw = DependencyWalker(i, self.channel, self.max_level, result[i])
+            dw = DependencyWalker(i,
+                                  self.base_channel,
+                                  self.max_level,
+                                  result[i])
             real_result.extend(dw.walk_dependency(level))
         return real_result
 
+
 class DependencyAdder:
 
-    """A class to add dependency class to list"""
+    """A class to add dependency class to list."""
 
     @staticmethod
     def add_package(package, asdep=True):
@@ -238,7 +215,8 @@ class DependencyAdder:
         """
         # Add key is like this : $OLDKEY$:ADDED => version-installed
         key = package + ums.defaults.ADDED_POSTFIX
-        version = ums.redis.hget(package, 'Version').strip('"')
+
+        version = ums.redis.hget(package, 'Version')
 
         old_version = ums.redis.get(key)
         if old_version:
@@ -247,7 +225,7 @@ class DependencyAdder:
         # First update new version
         ums.redis.set(key, version)
         # Push it to dl list
-        ums.redis.lpush(ums.defaults.DL_LIST)
+        ums.redis.lpush(ums.defaults.DL_LIST, key)
 
 
 def init(args):
@@ -257,12 +235,17 @@ def init(args):
     @param args: module arguments
 
     """
-
-    t = DependencyWalker(args.package, args.source, args.level, set())
+    t = DependencyWalker(args.package,
+                         args.source,
+                         args.level,
+                         set(),
+                         args.strict)
 
     wd = t.walk_dependency()
-    DependencyAdder.add_package(wd[0], False)
+    DependencyAdder.add_package(wd[0], args.asdep)
     del wd[0]
     for pkg_key in wd:
         DependencyAdder.add_package(pkg_key)
     ##
+
+    print ums.redis.keys('*' + ums.defaults.ADDED_POSTFIX)
