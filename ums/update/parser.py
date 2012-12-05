@@ -32,9 +32,9 @@ class SourcesParser:
         """
         if line[:1] == ' ':
             if not self.last_array_data:
-                self.result[self.last_index] += line.rstrip()
+                self.result[self.last_index] += line.rstrip().replace('"',' ')
             else:
-                self.result[self.last_index].append(line.strip())
+                self.result[self.last_index].append(line.strip().replace('"',' '))
         else:
             data = line.strip('\n').split(':', 1)
             if len(data) != 2:
@@ -45,7 +45,7 @@ class SourcesParser:
                 self.result[data[0]] = []
                 self.last_array_data = True
             else:
-                self.result[data[0]] = data[1].strip()
+                self.result[data[0]] = data[1].replace('"', ' ').strip(' \n\t')
                 self.last_array_data = False
 
     def save_toredis(self, pipe, channel):

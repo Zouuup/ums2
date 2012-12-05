@@ -163,7 +163,7 @@ class DependencyWalker:
             result.append(parts)
         return result
 
-    def walk_dependency(self, level):
+    def walk_dependency(self, level=0):
         """real walker.
 
         @type level: integer
@@ -173,6 +173,8 @@ class DependencyWalker:
         @return array of depends (in redis key strings)
 
         """
+        if self.prefered == '':
+            return []
 
         if level > self.max_level:
             return [self.prefered]
@@ -205,10 +207,47 @@ class DependencyWalker:
 
         #Now list is uniqe, walk for them
         real_result = [self.prefered]
+        # First add Provides
+        for p in DependencyWalker.provides:
+            items = self.redis.smembers(p)
+            for i in items:
+                pkg_detail = i.split(':')
+                dw = DependencyWalker(pkg_detail[1], pkg_detail[0], self.max_level)
+                real_result.extend(dw.walk_dependency(level))
+
+        DependencyWalker.provides = set()
         for i in result:
             dw = DependencyWalker(i, self.channel, self.max_level, result[i])
             real_result.extend(dw.walk_dependency(level))
         return real_result
+
+class DependencyAdder:
+
+    """A class to add dependency class to list"""
+
+    @staticmethod
+    def add_package(package, asdep=True):
+        """Add package to lit of installed package.
+
+        @type package: string
+        @param package: package to add to the list
+
+        @type asdep: boolean
+        @param asdep: is this a dependency
+
+        """
+        # Add key is like this : $OLDKEY$:ADDED => version-installed
+        key = package + ums.defaults.ADDED_POSTFIX
+        version = ums.redis.hget(package, 'Version').strip('"')
+
+        old_version = ums.redis.get(key)
+        if old_version:
+            if version == old_version:
+                return
+        # First update new version
+        ums.redis.set(key, version)
+        # Push it to dl list
+        ums.redis.lpush(ums.defaults.DL_LIST)
 
 
 def init(args):
@@ -221,6 +260,9 @@ def init(args):
 
     t = DependencyWalker(args.package, args.source, args.level, set())
 
-    print t.walk_dependency(0)
-
+    wd = t.walk_dependency()
+    DependencyAdder.add_package(wd[0], False)
+    del wd[0]
+    for pkg_key in wd:
+        DependencyAdder.add_package(pkg_key)
     ##
