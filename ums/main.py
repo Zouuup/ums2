@@ -11,6 +11,7 @@ import redis
 import ums.config
 import ums.update
 import ums.add
+import ums.download
 
 
 def main():
@@ -37,6 +38,7 @@ def main():
     ums.config.init_subparser(sub_parser)
     ums.update.init_subparser(sub_parser)
     ums.add.init_subparser(sub_parser)
+    ums.download.init_subparser(sub_parser)
 
     args = parser.parse_args()
 
