@@ -25,6 +25,11 @@ def init_subparser(sub_parser):
                             help='target architecture')
     add_parser.add_argument('target',
                             help='target in xamin project like stable/main')
+    add_parser.add_argument('email',
+                            help='Maintainer email')
+    add_parser.add_argument('gpg',
+                            help='key filename inside ' +
+                            ums.defaults.KEYS_PATH)
     add_parser.add_argument('--priority', type=int,
                             help='target priority, for duplicates')
     add_parser.add_argument('--mirror',

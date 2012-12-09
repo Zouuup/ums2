@@ -18,8 +18,7 @@ def init_subparser(sub_parser):
                                  help='Uniq id for this slave')
     h = 'target folder to store result into, '
     h += 'the home folder is used to store file.'
-    dhownload_parser.add_argument('tfolder',
-                                  help=h)
+    download_parser.add_argument('tfolder', help=h)
 
     download_parser.set_defaults(module='ums.download.main')
 

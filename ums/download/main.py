@@ -6,10 +6,14 @@ import ums
 import ums.defaults
 import json
 from subprocess import call
+from subprocess import check_output
 import hashlib
 import os
 import re
 import tarfile
+import time
+import shutil
+import StringIO
 
 
 class Download:
@@ -110,6 +114,8 @@ class Download:
 
         """
         tar = tarfile.open(local_file)
+        if os.path.isdir(local_file + '_'):
+            shutil.rmtree(local_file + '_', True)
         os.mkdir(local_file + '_')
         tar.extractall(local_file + '_')
 
@@ -126,12 +132,30 @@ class Download:
         @type local_file: string
         @param local_file: file to extract
 
+        @rtype :boolean
+        @return False on fail (even in one option)
+
         """
-        #TODO
-        None
+        push = os.getcwd()
+        os.chdir(local_file + '_')
+
+        (dist, part) = dist.split('/')
+
+        target = '/'.join([ums.defaults.QUILT_INJECTS,
+                           dist,
+                           package])
+        if not os.path.isdir(target):
+            return True  # Thats ok, no ptah
+
+        for files in os.listdir(ums.defaults.QUILT_INJECTS):
+            patch = '/'.join([ums.defaults.QUILT_INJECTS, files])
+            if call(['quilt', 'import', patch]) != 0:
+                return False
+
+        return True
 
     @staticmethod
-    def changelog_change(dist, package, local_file):
+    def changelog_change(dist, package, local_file, maintainer):
         """made changelog changes.
 
         @type dist: string
@@ -143,22 +167,83 @@ class Download:
         @type local_file: string
         @param local_file: file to extract
 
+        @type maintainer: string
+        @param maintainer: maintainer
+
+        @rtype :boolean
+        @return False on fail (even in one option)
+
         """
-
-        #TODO
-        None
+        (dist, part) = dist.split('/')
+        print local_file + '_/changelog'
+        os.rename(local_file + '_/debian/changelog',
+                  local_file + '_/changelog__old')
+        cl = file(local_file + '_/changelog__old', 'r')
+        cl_out = file(local_file + '_/debian/changelog', 'w')
+        # Need to alter first entry
+        first = cl.readline()
+        old_dist = re.search("[^)]*\)\s([^;]*)", first)
+        try:
+            old_dist = old_dist.group(1)
+        except:
+            return False
+        cl_out.write(first.replace(old_dist + ';', dist + ';'))
+        while True:
+            line = cl.readline()
+            if line[:4] == ' -- ':
+                break
+            cl_out.write(line)
+        line = ' -- %s  %s\n' % (maintainer,
+                                 time.strftime('%a, %d %b %Y %H:%M:%S %z'))
+        cl_out.write(line)
+        for l in cl:
+            cl_out.write(l)
+        cl.close()
+        cl_out.close()
 
     @staticmethod
-    def dsc_changse():
-        """Made dsc changes. """
-        #TODO
-        None
+    def dsc_changse(dsc_file, maintainer, files):
+        """Made dsc changes.
+
+        @type dsc_file: string
+        @param dsc_file: dsc file address
+
+        @type maintainer: string
+        @param maintainer: maintainer email (use this to sign)
+
+        @type files: list
+        @param files: list of files
+
+        """
+        # Detach sign
+        data_string = check_output(['gpg', '-d', dsc_file])
+        no_file = stringio.StringIO.StringIO(data_string)
+
+        for line in no_file:
+            if line[:1] != ' ':
+                last_line = line
+            if re.match("^Maintainer:.*", line):
+                line = "Maintainer: " + maintainer
+            elif re.match("^Uploaders:.*", line):
+                line = "Uploaders: " + maintainer
+
+        no_file = os.patch.splitext(dsc_file)[0]
+
+        # Lets sign it after all changes
 
     @staticmethod
-    def repack():
-        """Repack new file."""
-        #TODO
-        None
+    def repack(tar):
+        """Repack new file.
+
+        @type tar: string
+        @param tar: tar file address
+
+        """
+        file_name, file_extension = os.path.splitext(tar)
+        os.unlink(tar)
+        out = tarfile.open(tar, 'w:' + file_extension[1:])
+        out.add(tar + '_/debian', arcname='debian')
+        out.close()
 
     @staticmethod
     def fix_dsc_file():
@@ -189,10 +274,12 @@ class Download:
         target = json.loads(ums.redis.hget(job, '_Target'))
         mirror = json.loads(ums.redis.hget(job, '_Mirror'))
         pkg_format = json.loads(ums.redis.hget(job, 'Format'))
+        maintainer = json.loads(ums.redis.hget(job, '_Maintainer'))
         is_quilt = pkg_format.find('quilt') >= 0
 
         alist = json.loads(files)
         try_count = 0
+        finished_list = []
         try:
             while True:
                 f = alist.pop()
@@ -213,11 +300,11 @@ class Download:
                                            package,
                                            home + '/' + f_name)
                     Download.changelog_change(target,
-                                              source,
                                               package,
-                                              home + '/' + f_name)
-                    Download.dsc_changse()
-                    Download.repack()
+                                              home + '/' + f_name,
+                                              maintainer)
+                    Download.repack(home + '/' + f_name)
+                finished_list.append(f_name)
 
         except IndexError:
             pass

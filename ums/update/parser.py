@@ -143,6 +143,8 @@ def parse_sources(home, entry_all):
                 data.add_line('_Mirror: ' + entry['mirror'])
                 data.add_line('_Source: ' + entry['source'])
                 data.add_line('_Target: ' + entry['target'])
+                data.add_line('_Maintainer: ' + entry['maintainer'])
+                data.add_line('_GPG: ' + entry['gpg'])
                 data.save_toredis(ums.redis, entry['source'])
                 data.re_initialize()
             else:
