@@ -14,6 +14,7 @@ import tarfile
 import time
 import shutil
 import StringIO
+from ums.update.parser import SourcesParser
 
 
 class Download:
@@ -51,6 +52,28 @@ class Download:
         return call(['wget', '-c', '-O', target + '/' + f_name, source])
 
     @staticmethod
+    def calc_checksum(f_name, method):
+        """Calculate checksum.
+
+        @type f_name: string
+        @param f_name: file name
+
+        @type method: class
+        @param method: a class
+
+        @rtype : string
+        @return file hash digest
+
+        """
+        afile = open(f_name)
+        buf = afile.read(ums.defaults.BLOCK_SIZE)
+        while len(buf) > 0:
+            method.update(buf)
+            buf = afile.read(ums.defaults.BLOCK_SIZE)
+
+        return method.hexdigest()
+
+    @staticmethod
     def check_md5_sum(md5, f_name, target):
         """chack md5 hash of file.
 
@@ -67,14 +90,8 @@ class Download:
         @return false if fails
 
         """
-        afile = open(target + '/' + f_name)
-        hasher = hashlib.md5()
-        buf = afile.read(ums.defaults.BLOCK_SIZE)
-        while len(buf) > 0:
-            hasher.update(buf)
-            buf = afile.read(ums.defaults.BLOCK_SIZE)
-
-        return md5 == hasher.hexdigest()
+        return md5 == Download.calc_checksum(target + '/' + f_name,
+                                             hashlib.md5())
 
     @staticmethod
     def listen_to_change():
@@ -217,19 +234,50 @@ class Download:
         """
         # Detach sign
         data_string = check_output(['gpg', '-d', dsc_file])
-        no_file = stringio.StringIO.StringIO(data_string)
+        no_file = StringIO.StringIO(data_string)
 
-        for line in no_file:
-            if line[:1] != ' ':
-                last_line = line
-            if re.match("^Maintainer:.*", line):
-                line = "Maintainer: " + maintainer
-            elif re.match("^Uploaders:.*", line):
-                line = "Uploaders: " + maintainer
+        parser = SourcesParser()
+        parser.re_initialize()
 
-        no_file = os.patch.splitext(dsc_file)[0]
+        for i in no_file:
+            if i.strip(" \n\t") != '':
+                parser.add_line(i)
 
+        sha256 = []
+        for i in files:
+            item = Download.calc_checksum(i, hashlib.sha256()) + ' '
+            item += str(os.path.getsize(i)) + ' '
+            item += os.path.basename(i)
+            sha256.append(item)
+
+        parser.set_if_exists('Checksums-Sha256', sha256)
+
+        sha1 = []
+        for i in files:
+            item = Download.calc_checksum(i, hashlib.sha1()) + ' '
+            item += str(os.path.getsize(i)) + ' '
+            item += os.path.basename(i)
+            sha1.append(item)
+
+        parser.set_if_exists('Checksums-Sha1', sha1)
+
+        md5 = []
+        for i in files:
+            item = Download.calc_checksum(i, hashlib.md5()) + ' '
+            item += str(os.path.getsize(i)) + ' '
+            item += os.path.basename(i)
+            md5.append(item)
+
+        parser.set_if_exists('Files', md5)
+
+        no_file = os.path.splitext(dsc_file)[0]
+        f = open(no_file, 'w')
+        f.write(parser.repack())
+        f.close()
         # Lets sign it after all changes
+        call(['gpg', '--default-key', maintainer, '--clearsign', no_file])
+        os.unlink(dsc_file)
+        os.rename(no_file + '.asc', dsc_file)
 
     @staticmethod
     def repack(tar):
@@ -239,17 +287,12 @@ class Download:
         @param tar: tar file address
 
         """
+        return
         file_name, file_extension = os.path.splitext(tar)
         os.unlink(tar)
         out = tarfile.open(tar, 'w:' + file_extension[1:])
         out.add(tar + '_/debian', arcname='debian')
         out.close()
-
-    @staticmethod
-    def fix_dsc_file():
-        """fix and sign main dsc file."""
-        #TODO
-        None
 
     @staticmethod
     def check_for_old_jobs(uid, home):
@@ -280,6 +323,7 @@ class Download:
         alist = json.loads(files)
         try_count = 0
         finished_list = []
+        dsc_file = ''
         try:
             while True:
                 f = alist.pop()
@@ -293,7 +337,8 @@ class Download:
                     try_count += 1
                     os.unlink(home + '/' + f_name)
                     alist.append(f)  # Push it back, try again
-                if is_quilt and f_name.find('debian.tar') >= 0:
+                    continue
+                elif is_quilt and f_name.find('debian.tar') >= 0:
                     Download.extract_quilt(job,
                                            home + '/' + f_name)
                     Download.inject_patchs(target,
@@ -304,10 +349,17 @@ class Download:
                                               home + '/' + f_name,
                                               maintainer)
                     Download.repack(home + '/' + f_name)
-                finished_list.append(f_name)
+                if re.match('.*dsc$', f_name):
+                    dsc_file = home + '/' + f_name
+                else:
+                    finished_list.append(home + '/' + f_name)
 
         except IndexError:
             pass
+
+        if dsc_file == '':
+            raise Exception('Dsc file does not exist!, a bug')
+        Download.dsc_changse(dsc_file, maintainer, finished_list)
 
 
 def init(args):

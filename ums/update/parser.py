@@ -16,10 +16,12 @@ class SourcesParser:
     last_index = False
     last_data = False
     last_array_data = False
+    order = []
 
     def re_initialize(self):
         """Re initialize class."""
         self.result = {}
+        self.order = []
         self.last_index = False
         self.last_array_data = False
 
@@ -41,12 +43,45 @@ class SourcesParser:
                 raise Exception('invalid line: ' + line)
 
             self.last_index = data[0].strip()
+            self.order.append(data[0].strip())
             if data[1].strip(' \t\n') == '':
                 self.result[data[0]] = []
                 self.last_array_data = True
             else:
                 self.result[data[0]] = data[1].replace('"', ' ').strip(' \n\t')
                 self.last_array_data = False
+
+    def repack(self):
+        """Repack into source structure.
+
+        @rtype: string
+        @return recreated file
+
+        """
+        res = ''
+        for i in self.order:
+            if isinstance(self.result[i], list):
+                res += i + ':\n'
+                for j in self.result[i]:
+                    print res
+                    print j
+                    res += '' + j + '\n'
+            else:
+                res += i + ': ' + self.result[i] + '\n'
+        return res
+
+    def set_if_exists(self, index, data):
+        """Set this if already exists.
+
+        @type index: string
+        @param index: index to replace
+
+        @type data: anything
+        @param data: data for insert
+
+        """
+        if index in self.result:
+            self.result[index] = data
 
     def save_toredis(self, pipe, channel):
         """Save to redis.
@@ -144,7 +179,6 @@ def parse_sources(home, entry_all):
                 data.add_line('_Source: ' + entry['source'])
                 data.add_line('_Target: ' + entry['target'])
                 data.add_line('_Maintainer: ' + entry['maintainer'])
-                data.add_line('_GPG: ' + entry['gpg'])
                 data.save_toredis(ums.redis, entry['source'])
                 data.re_initialize()
             else:
