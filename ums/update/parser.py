@@ -63,9 +63,7 @@ class SourcesParser:
             if isinstance(self.result[i], list):
                 res += i + ':\n'
                 for j in self.result[i]:
-                    print res
-                    print j
-                    res += '' + j + '\n'
+                    res += ' ' + j.encode() + '\n'
             else:
                 res += i + ': ' + self.result[i] + '\n'
         return res

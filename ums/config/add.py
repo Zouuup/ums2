@@ -23,8 +23,7 @@ def init(args):
         'arch': args.arch,
         'source': args.source,
         'target': args.target,
-        'maintainer': args.email,
-        'gpg': args.gpg}
+        'maintainer': args.email}
 
     all_pkgs = ums.redis.get(ums.defaults.REDIS_PREFIX + 'sources')
 

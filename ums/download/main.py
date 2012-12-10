@@ -102,8 +102,9 @@ class Download:
 
         """
 
-        raise Exception("Not yet :)")
-        return ums.redis.brpop(ums.defaults.DL_LIST)
+        data = ums.redis.brpop(ums.defaults.DL_LIST)
+        print "Pop ", data
+        return data
 
     @staticmethod
     def return_job_to_list(uid, job):
@@ -153,7 +154,6 @@ class Download:
         @return False on fail (even in one option)
 
         """
-        push = os.getcwd()
         os.chdir(local_file + '_')
 
         (dist, part) = dist.split('/')
@@ -269,6 +269,8 @@ class Download:
             md5.append(item)
 
         parser.set_if_exists('Files', md5)
+        parser.set_if_exists('Maintainer', maintainer.encode())
+        parser.set_if_exists('Uploader', maintainer.encode())
 
         no_file = os.path.splitext(dsc_file)[0]
         f = open(no_file, 'w')
@@ -287,7 +289,6 @@ class Download:
         @param tar: tar file address
 
         """
-        return
         file_name, file_extension = os.path.splitext(tar)
         os.unlink(tar)
         out = tarfile.open(tar, 'w:' + file_extension[1:])
@@ -295,14 +296,40 @@ class Download:
         out.close()
 
     @staticmethod
-    def check_for_old_jobs(uid, home):
+    def move_to_target(dsc_file, files, target):
+        """save result into target folder.
+
+        @type dsc_file: string
+        @param dsc_file: dsc file name
+
+        @type files: list
+        @param files: list of files
+
+        @type target: string
+        @param target: home folder to save result
+
+        """
+        files.append(dsc_file)
+        for i in files:
+            t = target + '/' + os.path.basename(i)
+            try:
+                os.unlink(t)
+            except OSError:
+                pass
+            shutil.move(i, t)
+
+    @staticmethod
+    def check_for_old_jobs(uid, home, target_dir):
         """Check for slave key and continue old job.
 
         @type uid: string
         @param uid: slave uniq id
 
         @type home: string
-        @param home: home folder to save result
+        @param home: home folder to work on folders
+
+        @type target_dir: string
+        @param target_dir: home folder to save result
 
         """
 
@@ -310,6 +337,8 @@ class Download:
         if not job:
             return
 
+        l = len(ums.defaults.ADDED_POSTFIX)
+        job = job[:-l]
         # Job is key to real package
         files = ums.redis.hget(job, 'Files')
         package = json.loads(ums.redis.hget(job, 'Package'))
@@ -360,6 +389,8 @@ class Download:
         if dsc_file == '':
             raise Exception('Dsc file does not exist!, a bug')
         Download.dsc_changse(dsc_file, maintainer, finished_list)
+        Download.move_to_target(dsc_file, finished_list, target_dir)
+        ums.redis.delete(ums.defaults.SLAVE_PREFIX + uid.upper())
 
 
 def init(args):
@@ -372,10 +403,12 @@ def init(args):
 
     home = args.home
     uid = args.uid
+    target = args.tfolder
+    print target
     # Simply, loop and watch
     while ums.redis.ping():
         # Check if a job is waiting
-        Download.check_for_old_jobs(uid, home)
+        Download.check_for_old_jobs(uid, home, target)
         result = Download.listen_to_change()
         if result:  # None on timeout
             # Time to add this a s a key
