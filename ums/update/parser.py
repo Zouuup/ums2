@@ -207,4 +207,4 @@ def parse_sources(home, entry_all):
 
     ums.redis.execute_command('EXEC')
 
-    print "Updatet successfully"
+    print "Repository Updated successfully!"
