@@ -13,7 +13,7 @@ Master
  * Update :
    ```ums update```
  * Add a package :
-   ```ums add apache2 stable/main apache2 --level 3```
+   ```ums add stable/main apache2 --level 3```
  
 Slave (Downloader)
 ==================
