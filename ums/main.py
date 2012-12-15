@@ -12,7 +12,7 @@ import ums.config
 import ums.update
 import ums.add
 import ums.download
-
+from os import mkdir 
 
 def main():
     """ Application entry point. """
@@ -42,7 +42,10 @@ def main():
 
     args = parser.parse_args()
 
-    #initialize redis first
+    # Making sure HOME directory is created
+    mkdir (args.home)
+
+    # initialize redis first
     ums.redis = redis.StrictRedis(host=args.redis_host,
                                   port=args.redis_port, db=0)
 
